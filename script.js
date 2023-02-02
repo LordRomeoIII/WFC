@@ -77,10 +77,10 @@ function setup() {
   testTileMap.initializeTileMap()
   noLoop()
 
-  createButton("Play").mousePressed(() => loop())
-  createButton("Step").mousePressed(() => redraw())
-  createButton("Stop").mousePressed(() => noLoop())
-  createButton("Reset").mousePressed(() => testTileMap.initializeTileMap())
+  createButton("Play").parent('#main-div').mousePressed(() => loop())
+  createButton("Step").parent('#main-div').mousePressed(() => redraw())
+  createButton("Stop").parent('#main-div').mousePressed(() => noLoop())
+  createButton("Reset").parent('#main-div').mousePressed(() => testTileMap.initializeTileMap())
 }
 
 // Draw ----------------------------------------------------------------------------------
@@ -204,7 +204,7 @@ class TileMap {
 
   initializeTileMap() {
     this.clearTileMap()
-    let randomGridIndex = Math.floor(Math.random() * this.tileArray.length)
+    let randomGridIndex = randomNumber(this.tileArray.length)
     this.collapseTile(randomGridIndex)
   }
 
@@ -216,7 +216,7 @@ class TileMap {
       }
       return filtered
     }, [])
-    let selectedIndex = validIndex[Math.floor(Math.random() * validIndex.length)]
+    let selectedIndex = validIndex[randomNumber(validIndex.length)]
 
     this.tileArray[indexTile].tileSprite = this.tileSet.getTile(selectedIndex)
     this.tileArray[indexTile].entropy = 0
@@ -233,7 +233,7 @@ class TileMap {
     let lowestEntropy = uncollapsedTiles.reduce((a, b) => a.entropy < b.entropy ? a : b).entropy
     let lowestEntropyTiles = this.tileArray.filter(t => t.entropy == lowestEntropy)
     // Randomly select a tile and collapse it
-    let indexSelected = Math.floor(Math.random() * lowestEntropyTiles.length)
+    let indexSelected = randomNumber(lowestEntropyTiles.length)
     let indexTile = lowestEntropyTiles[indexSelected].index
     // this.collapseTile(selectedIndex)
     this.collapseTile(indexTile)
@@ -306,8 +306,13 @@ class TileMap {
 
   _setupRandom() {
     for (let i = 0; i < this.tileArray.length; i++) {
-      let randomIndex = Math.floor(Math.random() * this.tileSet.length)
+      let randomIndex = randomNumber(this.tileSet.length)
       this.tileArray[i].tileSprite = this.tileSet.getTile(randomIndex)
     }
   }
+}
+
+// Aux functions -------------------------------------------------------------------------
+function randomNumber(maxNumber) {
+  return Math.floor(Math.random() * maxNumber)
 }
