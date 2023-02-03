@@ -1,7 +1,7 @@
 // Global variables ----------------------------------------------------------------------
 let testTileSet, testTileMap
-let tileSize = 32
-let tileMapRows = 24, tileMapCols = 24
+let tileSize = 16
+let tileMapRows = 64, tileMapCols = 64
 
 let canvasBackgroundColor = '#fff0ff'
 let canvasWidth = tileSize * tileMapCols, canvasHeight = tileSize * tileMapRows
@@ -27,43 +27,43 @@ function preload() {
     down: ConnectionType.Pipe,
     right: ConnectionType.Blank,
     up: ConnectionType.Pipe
-  }), RotationType.R4)
+  }), RotationType.R4, 1)
   testTileSet.addTile(new Tile('I.png', {
     left: ConnectionType.Blank,
     down: ConnectionType.Pipe,
     right: ConnectionType.Blank,
     up: ConnectionType.Pipe
-  }), RotationType.R2)
+  }), RotationType.R2, 0)
   testTileSet.addTile(new Tile('L.png', {
     left: ConnectionType.Pipe,
     down: ConnectionType.Pipe,
     right: ConnectionType.Blank,
     up: ConnectionType.Blank
-  }), RotationType.R4)
+  }), RotationType.R4, 0)
   testTileSet.addTile(new Tile('O.png', {
-      left:  ConnectionType.Pipe,
-      down:  ConnectionType.Blank,
-      right: ConnectionType.Blank,
-      up:    ConnectionType.Blank
-  }), RotationType.R4)
+    left: ConnectionType.Pipe,
+    down: ConnectionType.Blank,
+    right: ConnectionType.Blank,
+    up: ConnectionType.Blank
+  }), RotationType.R4, 0)
   testTileSet.addTile(new Tile('blank.png', {
     left: ConnectionType.Blank,
     down: ConnectionType.Blank,
     right: ConnectionType.Blank,
     up: ConnectionType.Blank
-  }))
+  }), RotationType.R1, 10)
   testTileSet.addTile(new Tile('all.png', {
-    left:  ConnectionType.Pipe,
-    down:  ConnectionType.Pipe,
+    left: ConnectionType.Pipe,
+    down: ConnectionType.Pipe,
     right: ConnectionType.Pipe,
-    up:    ConnectionType.Pipe
-  }), RotationType.R1)
+    up: ConnectionType.Pipe
+  }), RotationType.R1, 0)
   testTileSet.addTile(new Tile('B.png', {
-    left:  ConnectionType.Pipe,
-    down:  ConnectionType.Pipe,
+    left: ConnectionType.Pipe,
+    down: ConnectionType.Pipe,
     right: ConnectionType.Pipe,
-    up:    ConnectionType.Pipe
-  }), RotationType.R2)
+    up: ConnectionType.Pipe
+  }), RotationType.R2, 0)
 }
 
 // Setup ---------------------------------------------------------------------------------
@@ -96,11 +96,12 @@ function draw() {
 
 // Tile Class ----------------------------------------------------------------------------
 class Tile {
-  constructor(sprite, connection) {
+  constructor(sprite, connection, weight) {
     this.spriteFilename = sprite
     this.sprite = loadImage('tiles/' + this.spriteFilename)
     this.connectionConfig = connection
     this.rotation = 0
+    this.weight = weight
   }
 
   setRotation(rotationIndex) {
@@ -118,6 +119,10 @@ class Tile {
       entry[1] = connectionValues[index]
     })
     this.connectionConfig = Object.fromEntries(newConfig)
+  }
+
+  setWeight(weight) {
+    this.weight = weight
   }
 
   clone() {
@@ -143,10 +148,11 @@ class TileSet {
     this.length = this.tileArray.length
   }
 
-  addTile(tile, rotation = RotationType.R1) {
+  addTile(tile, rotation = RotationType.R1, weight = 1) {
     rotation.forEach(angleIndex => {
       let newTile = tile.clone()
       newTile.setRotation(angleIndex)
+      newTile.setWeight(weight)
       this.tileArray.push(newTile)
     })
     this.length = this.tileArray.length
@@ -174,7 +180,7 @@ class TileMap {
     this.cols = cols
     this.tileSet = tileSet
 
-    this.tileArray = new Array(rows * cols)
+    this.tileMapArray = new Array(rows * cols)
     this.clearTileMap()
   }
 
@@ -194,7 +200,7 @@ class TileMap {
     let tileSize = this.tileSet.tileSize
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
-        let tile = this.tileArray[i + j * this.cols].tileSprite
+        let tile = this.tileMapArray[i + j * this.cols].tileSprite
         if (tile != undefined) {
           tile.draw(i * tileSize, j * tileSize, tileSize)
         }
@@ -204,39 +210,45 @@ class TileMap {
 
   initializeTileMap() {
     this.clearTileMap()
-    let randomGridIndex = randomNumber(this.tileArray.length)
+    let randomGridIndex = randomNumber(this.tileMapArray.length)
     this.collapseTile(randomGridIndex)
   }
 
   collapseTile(indexTile) {
-    let options = this.tileArray[indexTile].options
-    let validIndex = this.tileArray[indexTile].options.reduce((filtered, flag, index) => {
+    let validTiles = this.tileMapArray[indexTile].options.reduce((filtered, flag, index) => {
       if (flag) {
-        filtered.push(index)
+        filtered.push(this.tileSet.tileArray[index])
       }
       return filtered
     }, [])
-    let selectedIndex = validIndex[randomNumber(validIndex.length)]
-
-    this.tileArray[indexTile].tileSprite = this.tileSet.getTile(selectedIndex)
-    this.tileArray[indexTile].entropy = 0
-    this.tileArray[indexTile].options = []
+    let selectedTileIndex = this.randomTileChoice(validTiles)
+    
+    this.tileMapArray[indexTile].tileSprite = validTiles[selectedTileIndex]
+    this.tileMapArray[indexTile].entropy = 0
+    this.tileMapArray[indexTile].options = []
 
     this.updateEntropy(indexTile)
   }
 
   updateTiles() {
     // Get the uncollapsed tiles and abort if theres none left
-    let uncollapsedTiles = this.tileArray.filter(t => t.entropy > 0)
+    let uncollapsedTiles = this.tileMapArray.filter(t => t.entropy > 0)
     if (uncollapsedTiles.length == 0) return
+
     // Get the tiles with lowest entropy
     let lowestEntropy = uncollapsedTiles.reduce((a, b) => a.entropy < b.entropy ? a : b).entropy
-    let lowestEntropyTiles = this.tileArray.filter(t => t.entropy == lowestEntropy)
+    let lowestEntropyTiles = this.tileMapArray.filter(t => t.entropy == lowestEntropy)
+    
     // Randomly select a tile and collapse it
     let indexSelected = randomNumber(lowestEntropyTiles.length)
     let indexTile = lowestEntropyTiles[indexSelected].index
-    // this.collapseTile(selectedIndex)
     this.collapseTile(indexTile)
+  }
+
+  randomTileChoice(choices) {
+    let weights = choices.map(tile => tile.weight)
+    let choiceIndex = randomChoice(weights)
+    return choiceIndex
   }
 
   updateEntropy(indexTile) {
@@ -244,39 +256,42 @@ class TileMap {
     // Left
     if (indexTile % this.cols != 0) {
       indexNeighbour = indexTile - 1
-      this.updateTileEntropy(indexNeighbour, 'right', this.tileArray[indexTile].tileSprite.connectionConfig.left)
+      this.updateTileEntropy(indexNeighbour, 'right', this.tileMapArray[indexTile].tileSprite.connectionConfig.left)
     }
+
     // Down
     if (Math.trunc(indexTile / this.cols) != this.rows - 1) {
       indexNeighbour = indexTile + this.cols
-      this.updateTileEntropy(indexNeighbour, 'up', this.tileArray[indexTile].tileSprite.connectionConfig.down)
+      this.updateTileEntropy(indexNeighbour, 'up', this.tileMapArray[indexTile].tileSprite.connectionConfig.down)
     }
+
     // Right
     if ((indexTile + 1) % this.cols != 0) {
       indexNeighbour = indexTile + 1
-      this.updateTileEntropy(indexNeighbour, 'left', this.tileArray[indexTile].tileSprite.connectionConfig.right)
+      this.updateTileEntropy(indexNeighbour, 'left', this.tileMapArray[indexTile].tileSprite.connectionConfig.right)
     }
+
     // Up
     if (Math.trunc(indexTile / this.cols) != 0) {
       indexNeighbour = indexTile - this.cols
-      this.updateTileEntropy(indexNeighbour, 'down', this.tileArray[indexTile].tileSprite.connectionConfig.up)
+      this.updateTileEntropy(indexNeighbour, 'down', this.tileMapArray[indexTile].tileSprite.connectionConfig.up)
     }
   }
 
   updateTileEntropy(indexTile, direction, connection) {
-    this.tileArray[indexTile].options.forEach((valid, index) => {
+    this.tileMapArray[indexTile].options.forEach((valid, index) => {
       if (valid) {
         if (this.tileSet.tileArray[index].connectionConfig[direction] != connection) {
-          this.tileArray[indexTile].options[index] = false
+          this.tileMapArray[indexTile].options[index] = false
         }
       }
     })
-    this.tileArray[indexTile].entropy = this.tileArray[indexTile].options.reduce((total, element) => total += element, 0)
+    this.tileMapArray[indexTile].entropy = this.tileMapArray[indexTile].options.reduce((total, element) => total += element, 0)
   }
 
   clearTileMap() {
-    for (let i = 0; i < this.tileArray.length; i++) {
-      this.tileArray[i] = {
+    for (let i = 0; i < this.tileMapArray.length; i++) {
+      this.tileMapArray[i] = {
         tileSprite: undefined,
         entropy: this.tileSet.length,
         options: new Array(this.tileSet.length).fill(true),
@@ -297,7 +312,7 @@ class TileMap {
     for (let j = 0; j < this.rows; j++) {
       for (let i = 0; i < this.cols; i++) {
         fill('yellow')
-        text(this.tileArray[i + j * this.cols].entropy, (i + 0.5) * tileSize, (j + 0.5) * tileSize)
+        text(this.tileMapArray[i + j * this.cols].entropy, (i + 0.5) * tileSize, (j + 0.5) * tileSize)
         fill('lime')
         text(i + j * this.cols, (i + 0.5) * tileSize, (j + 0.5) * tileSize + 10)
       }
@@ -305,9 +320,9 @@ class TileMap {
   }
 
   _setupRandom() {
-    for (let i = 0; i < this.tileArray.length; i++) {
+    for (let i = 0; i < this.tileMapArray.length; i++) {
       let randomIndex = randomNumber(this.tileSet.length)
-      this.tileArray[i].tileSprite = this.tileSet.getTile(randomIndex)
+      this.tileMapArray[i].tileSprite = this.tileSet.getTile(randomIndex)
     }
   }
 }
@@ -315,4 +330,16 @@ class TileMap {
 // Aux functions -------------------------------------------------------------------------
 function randomNumber(maxNumber) {
   return Math.floor(Math.random() * maxNumber)
+}
+
+function randomChoice(weights) {
+  let cumulativeProbability = weights.map((sum = 0, n => sum += n))
+  let total = cumulativeProbability.slice(-1)
+  let treshold = Math.random() * total
+
+  for (let i = 0; i < cumulativeProbability.length; i++) {
+    if (cumulativeProbability[i] > treshold) {
+      return i
+    }
+  }
 }
